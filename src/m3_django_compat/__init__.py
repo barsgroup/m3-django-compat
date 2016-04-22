@@ -37,7 +37,14 @@ def get_user_model():
     u"""Возвращает класс модели учетной записи.
 
     Для Django 1.4 возвращает :class:`django.contrib.auth.models.User`, а для
-    версий 1.5 и старше - модель, указанную в параметре `AUTH_USER_MODEL`.
+    версий 1.5 и старше - результат вызова
+    :func:`django.contrib.auth.get_user_model`.
     """
-    return get_model(*AUTH_USER_MODEL.split('.'))
+    if _14:
+        result = get_model('auth', 'User')
+    else:
+        from django.contrib.auth import get_user_model
+        result = get_user_model()
+
+    return result
 # -----------------------------------------------------------------------------
