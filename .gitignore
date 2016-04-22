@@ -20,3 +20,6 @@ dist
 # Sphinx
 docs/_build
 docs/api
+
+# m3-builder
+version.conf
