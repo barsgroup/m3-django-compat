@@ -7,11 +7,7 @@ from django.db.models.loading import get_model
 _VERSION = VERSION[:2]
 
 
-assert (1, 4) <= _VERSION <= (1, 5)
-
-
 _14 = _VERSION == (1, 4)
-_15 = _VERSION == (1, 5)
 # -----------------------------------------------------------------------------
 # Модель "Учетная запись"
 
