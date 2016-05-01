@@ -1,3 +1,4 @@
 graft src
 include README.rst
 include version.conf
+global-exclude *.pyc
