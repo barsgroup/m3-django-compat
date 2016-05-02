@@ -1,6 +1,7 @@
 # coding: utf-8
 from django import VERSION
 from django.conf import settings
+from django.db import transaction as _transaction
 
 
 _VERSION = VERSION[:2]
@@ -83,6 +84,100 @@ def get_user_model():
     else:
         from django.contrib.auth import get_user_model
         result = get_user_model()
+
+    return result
+# -----------------------------------------------------------------------------
+# Транзакции
+
+
+def in_atomic_block(using=None):
+    u"""Возвращает ``True``, если в момент вызова открыта транзакция.
+
+    Если включен режим автоподтверждения (autocommit), то возвращает ``False``.
+
+    :param str using: Алиас базы данных.
+
+    :rtype: bool
+    """
+    if (1, 4) <= _VERSION <= (1, 5):
+        result = _transaction.is_managed(using)
+    else:
+        result = _transaction.get_connection(using).in_atomic_block
+
+    return result
+
+
+if (1, 4) <= _VERSION <= (1, 5):
+    class _Atomic(object):
+
+        def __init__(self, savepoint):
+            self._savepoint = savepoint
+            self._sid = None
+
+        def entering(self, using):
+            if in_atomic_block(using):
+                if self._savepoint:
+                    self._sid = _transaction.savepoint(using)
+            else:
+                self._commit_on_exit = True
+
+                _transaction.enter_transaction_management(using=using)
+                _transaction.managed(True, using=using)
+
+        def exiting(self, exc_value, using):
+            if self._sid:
+                if self._savepoint:
+                    if exc_value is None:
+                        _transaction.savepoint_commit(self._sid, using)
+                    else:
+                        _transaction.savepoint_rollback(self._sid, using)
+            else:
+                try:
+                    if exc_value is not None:
+                        if _transaction.is_dirty(using=using):
+                            _transaction.rollback(using=using)
+                    else:
+                        if _transaction.is_dirty(using=using):
+                            try:
+                                _transaction.commit(using=using)
+                            except:
+                                _transaction.rollback(using=using)
+                                raise
+                finally:
+                    _transaction.leave_transaction_management(using=using)
+
+
+def atomic(using=None, savepoint=True):
+    u"""Совместимый аналог декоратора/менеджера контекста ``atomic``.
+
+    В Django>=1.6 задействует функционал ``atomic``, а в версиях ниже 1.6
+    имитирует его поведение средствами модуля ``django.db.transaction``, при
+    этом, в отличие от ``commit_on_success`` из Django<1.6, поддерживает
+    вложенность.
+
+    :param str using: Алиас базы данных. Если указано значение ``None``, будет
+        использован алиас базы данных по умолчанию.
+    :param bool savepoint: Определяет, будут ли использоваться точки сохранения
+        (savepoints) при использовании вложенных ``atomic``.
+    """
+    if (1, 4) <= _VERSION <= (1, 5):
+        if callable(using):
+            # atomic вызван как декоратор без параметров
+            from django.db.utils import DEFAULT_DB_ALIAS
+            func = using
+            using = DEFAULT_DB_ALIAS
+        else:
+            func = None
+
+        atomic = _Atomic(savepoint)
+        result = _transaction._transaction_func(
+            atomic.entering, atomic.exiting, using
+        )
+
+        if func:
+            result = result(func)
+    else:
+        result = _transaction.atomic(using, savepoint)
 
     return result
 # -----------------------------------------------------------------------------
