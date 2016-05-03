@@ -1,20 +1,27 @@
 # coding: utf-8
+from warnings import catch_warnings
+
 from django.test import SimpleTestCase
 from django.test import TestCase
 
 from m3_django_compat import AUTH_USER_MODEL
+from m3_django_compat import Manager
 from m3_django_compat import atomic
 from m3_django_compat import get_model
 from m3_django_compat import get_user_model
 from m3_django_compat import in_atomic_block
 
 
+# -----------------------------------------------------------------------------
+# Проверка работы с моделью учетной записи
 class CustomUserModelTestCase(TestCase):
 
     def test_get_user_model(self):
         u"""Проверка функции get_user_model."""
         user_model = get_model(*AUTH_USER_MODEL.split('.'))
         self.assertIs(user_model, get_user_model())
+# -----------------------------------------------------------------------------
+# Проверка работы с транзакциями
 
 
 class AtomicTestCase(SimpleTestCase):
@@ -103,4 +110,38 @@ class AtomicTestCase(SimpleTestCase):
         self.assertFalse(self._is_user_exist('user5'))
         self.assertFalse(self._is_user_exist('user6'))
         self.assertFalse(in_atomic_block())
-        # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# -----------------------------------------------------------------------------
+# Проверка обеспечения совместимости менеджеров моделей
+
+
+class ManagerTestCase(TestCase):
+
+    def test_manager_compat(self):
+        u"""Проверка совместимости менеджеров моделей."""
+        model = get_model('myapp', 'ModelWithCustomManager')
+        self.assertIsNotNone(model)
+
+        for i in xrange(-5, 6):
+            model.objects.create(number=i)
+
+        self.assertEqual(model.objects.count(), model.old_manager.count())
+        self.assertEqual(model.objects.count(), model.new_manager.count())
+
+        with self.assertNumQueries(1), catch_warnings('ignore'):
+            self.assertTrue(
+                all(obj.number > 0 for obj in model.old_manager.positive())
+            )
+        with self.assertNumQueries(1), catch_warnings('ignore'):
+            self.assertTrue(
+                all(obj.number < 0 for obj in model.old_manager.negative())
+            )
+
+        with self.assertNumQueries(1):
+            self.assertTrue(
+                all(obj.number > 0 for obj in model.new_manager.positive())
+            )
+        with self.assertNumQueries(1):
+            self.assertTrue(
+                all(obj.number < 0 for obj in model.new_manager.negative())
+            )
+# -----------------------------------------------------------------------------
