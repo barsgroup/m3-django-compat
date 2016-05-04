@@ -16,6 +16,7 @@
 .eggs
 dist
 *.egg-info
+.tox
 
 # Sphinx
 docs/_build

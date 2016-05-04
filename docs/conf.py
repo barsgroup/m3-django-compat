@@ -23,6 +23,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(
 )))
 os.environ['DJANGO_SETTINGS_MODULE'] = 'tests.settings'
 
+
+def _fix():
+    from tests import settings
+    settings.AUTH_USER_MODEL = None
+
+
+_fix()
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.

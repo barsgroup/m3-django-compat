@@ -1,5 +1,8 @@
 import os
 
+from django import VERSION
+
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 SECRET_KEY = 'abc123'
@@ -68,3 +71,8 @@ USE_L10N = True
 USE_TZ = True
 
 STATIC_URL = '/static/'
+
+
+if VERSION >= (1, 5):
+    AUTH_USER_MODEL = 'user.CustomUser'
+    INSTALLED_APPS.append('user')
