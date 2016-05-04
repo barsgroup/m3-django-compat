@@ -181,3 +181,56 @@ def atomic(using=None, savepoint=True):
 
     return result
 # -----------------------------------------------------------------------------
+# Обеспечение совместимости менеджеров моделей
+
+
+from django.db.models.manager import Manager as _Manager
+
+
+class Manager(_Manager):
+
+    u"""Базовый класс для менеджеров моделей.
+
+    Создан в связи с переименованием в Django 1.6 метода ``get_query_set`` в
+    ``get_queryset`` и ``get_prefetch_query_set`` в ``get_prefetch_queryset``.
+
+    "Пробрасывает" вызовы этих методов к методам
+    :class:`django.db.models.manager.Manager`, соответствующим используемой
+    версии Django.
+
+    Предназначен для использования в качестве базового класса вместо
+    :class:`django.db.models.manager.Manager`.
+    """
+
+    def __get_queryset_method(self):
+        if (1, 4) <= _VERSION <= (1, 5):
+            result = super(Manager, self).get_query_set
+        else:
+            result = super(Manager, self).get_queryset
+
+        return result
+
+    @property
+    def get_queryset(self):
+        return self.__get_queryset_method()
+
+    @property
+    def get_query_set(self):
+        return self.__get_queryset_method()
+
+    def __get_prefetch_queryset_method(self):
+        if (1, 4) <= _VERSION <= (1, 5):
+            result = super(Manager, self).get_prefetch_query_set
+        else:
+            result = super(Manager, self).get_prefetch_queryset
+
+        return result
+
+    @property
+    def get_prefetch_queryset(self):
+        return self.__get_prefetch_queryset_method()
+
+    @property
+    def get_prefetch_query_set(self):
+        return self.__get_prefetch_queryset_method()
+# -----------------------------------------------------------------------------
