@@ -10,6 +10,7 @@ from m3_django_compat import atomic
 from m3_django_compat import get_model
 from m3_django_compat import get_user_model
 from m3_django_compat import in_atomic_block
+from django.db.models.query import QuerySet
 
 
 # -----------------------------------------------------------------------------
@@ -123,6 +124,11 @@ class ManagerTestCase(TestCase):
 
         for i in xrange(-5, 6):
             model.objects.create(number=i)
+
+        self.assertIsInstance(model.new_manager.get_query_set(), QuerySet)
+        self.assertIsInstance(model.new_manager.get_queryset(), QuerySet)
+        self.assertIsInstance(model.old_manager.get_query_set(), QuerySet)
+        self.assertIsInstance(model.old_manager.get_queryset(), QuerySet)
 
         self.assertEqual(model.objects.count(), model.old_manager.count())
         self.assertEqual(model.objects.count(), model.new_manager.count())
