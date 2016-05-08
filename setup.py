@@ -14,7 +14,7 @@ def main():
                     u'разными версия Django',
         url='https://stash.bars-open.ru/projects/M3/repos/m3-django-compat',
         package_dir={'': 'src'},
-        packages=find_packages('src'),
+        packages=find_packages('src', exclude=('tests', 'tests.*')),
         include_package_data=True,
         dependency_links=(
             'http://pypi.bars-open.ru/simple/m3-builder',
