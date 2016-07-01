@@ -234,3 +234,10 @@ class Manager(_Manager):
     def get_prefetch_query_set(self):
         return self.__get_prefetch_queryset_method()
 # -----------------------------------------------------------------------------
+# Базовый класс для загрузчика шаблонов
+
+if (1, 4) <= _VERSION <= (1, 7):
+    from django.template.loader import BaseLoader
+else:
+    from django.template.loaders.base import Loader as BaseLoader
+# -----------------------------------------------------------------------------
