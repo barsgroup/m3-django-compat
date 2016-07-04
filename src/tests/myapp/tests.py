@@ -1,16 +1,19 @@
 # coding: utf-8
 from warnings import catch_warnings
 
+from django.db import models
+from django.db.models.query import QuerySet
 from django.test import SimpleTestCase
 from django.test import TestCase
 
 from m3_django_compat import AUTH_USER_MODEL
 from m3_django_compat import Manager
+from m3_django_compat import ModelOptions
 from m3_django_compat import atomic
 from m3_django_compat import get_model
 from m3_django_compat import get_user_model
 from m3_django_compat import in_atomic_block
-from django.db.models.query import QuerySet
+from m3_django_compat import RelatedObject
 
 
 # -----------------------------------------------------------------------------
@@ -150,4 +153,98 @@ class ManagerTestCase(TestCase):
             self.assertTrue(
                 all(obj.number < 0 for obj in model.new_manager.negative())
             )
+# -----------------------------------------------------------------------------
+# Проверка корректности обеспечения совместимости для Model API
+
+
+class ModelOptionsTestCase(TestCase):
+
+    def test__get_field__method(self):
+        data = (
+            dict(
+                model=get_model('myapp', 'Model1'),
+                fields=(
+                    ('simple_field', models.CharField),
+                ),
+            ),
+            dict(
+                model=get_model('myapp', 'Model2'),
+                fields=(
+                    ('simple_field', models.CharField),
+                    ('fk_field', models.ForeignKey),
+                ),
+            ),
+            dict(
+                model=get_model('myapp', 'Model3'),
+                fields=(
+                    ('simple_field', models.CharField),
+                    ('m2m_field', models.ManyToManyField),
+                ),
+            ),
+        )
+
+        for test_data in data:
+            model, fields = test_data['model'], test_data['fields']
+            opts = ModelOptions(model)
+
+            for field_name, field_type in fields:
+                self.assertIsInstance(opts.get_field(field_name), field_type)
+
+                f, _, _, _ = opts.get_field_by_name(field_name)
+                self.assertIsInstance(f, field_type, field_type)
+
+    def test__get_m2m_with_model__method(self):
+        data = (
+            dict(
+                model=get_model('myapp', 'Model3'),
+                m2m_fields=('m2m_field',),
+            ),
+        )
+
+        for test_data in data:
+            model = test_data['model']
+            m2m_fields = test_data['m2m_fields']
+            opts = ModelOptions(model)
+
+            for f, _ in opts.get_m2m_with_model():
+                self.assertIsInstance(f, models.ManyToManyField)
+                self.assertIn(f.name, m2m_fields)
+                self.assertIs(f, model._meta.get_field(f.name))
+
+    def test__get_all_related_objects__method(self):
+        data = (
+            dict(
+                model=get_model('myapp', 'Model1'),
+                field_names=('model2',),
+            ),
+            dict(
+                model=get_model('myapp', 'Model2'),
+                field_names=(),
+            ),
+            dict(
+                model=get_model('myapp', 'Model3'),
+                field_names=(),
+            ),
+        )
+
+        for test_data in data:
+            model = test_data['model']
+            field_names = test_data['field_names']
+            opts = ModelOptions(model)
+
+            related_objects = opts.get_all_related_objects()
+            self.assertEqual(
+                len(related_objects), len(field_names),
+                (model, related_objects, field_names)
+            )
+            self.assertEqual(
+                set(field_names),
+                set(related_object.model_name
+                    for related_object in related_objects),
+                (model, related_objects, field_names)
+            )
+            self.assertTrue(all(
+                isinstance(ro, RelatedObject)
+                for ro in related_objects
+            ))
 # -----------------------------------------------------------------------------
