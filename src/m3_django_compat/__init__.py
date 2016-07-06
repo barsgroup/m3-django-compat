@@ -185,6 +185,17 @@ def atomic(using=None, savepoint=True):
         result = _transaction.atomic(using, savepoint)
 
     return result
+
+
+def commit_unless_managed(using=None):
+    u"""Совместимый аналог функции commit_unless_managed.
+
+    В Django 1.6+ эта функция была помечена, как устаревшая, а в Django 1.8+
+    была удалена.
+    """
+    if (1, 4) <= _VERSION <= (1, 5):
+        from django.db.transaction import commit_unless_managed as func
+        return func(using)
 # -----------------------------------------------------------------------------
 # Обеспечение совместимости менеджеров моделей
 
