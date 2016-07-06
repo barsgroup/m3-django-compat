@@ -1,12 +1,17 @@
 # coding: utf-8
+from inspect import isclass
+from itertools import chain
+
 from django import VERSION
 from django.conf import settings
 from django.db import transaction as _transaction
+from django.db.models.base import Model
+from django.db.models.fields import FieldDoesNotExist
+from django.db.models.manager import Manager as _Manager
 
 
 _VERSION = VERSION[:2]
 _14 = _VERSION == (1, 4)
-
 
 #: Минимальная подерживаемая версия Django.
 MIN_SUPPORTED_VERSION = (1, 4)
@@ -180,11 +185,19 @@ def atomic(using=None, savepoint=True):
         result = _transaction.atomic(using, savepoint)
 
     return result
+
+
+def commit_unless_managed(using=None):
+    u"""Совместимый аналог функции commit_unless_managed.
+
+    В Django 1.6+ эта функция была помечена, как устаревшая, а в Django 1.8+
+    была удалена.
+    """
+    if (1, 4) <= _VERSION <= (1, 5):
+        from django.db.transaction import commit_unless_managed as func
+        return func(using)
 # -----------------------------------------------------------------------------
 # Обеспечение совместимости менеджеров моделей
-
-
-from django.db.models.manager import Manager as _Manager
 
 
 class Manager(_Manager):
@@ -240,4 +253,103 @@ if (1, 4) <= _VERSION <= (1, 7):
     from django.template.loader import BaseLoader
 else:
     from django.template.loaders.base import Loader as BaseLoader
+# -----------------------------------------------------------------------------
+# Средства обеспечения совместимости с разными версиями Model API
+
+
+class RelatedObject(object):
+
+    u"""Зависимый объект."""
+
+    def __init__(self, relation):
+        self.relation = relation
+
+    def __repr__(self, *args, **kwargs):
+        return 'RelatedObject: ' + repr(self.relation)
+
+    @property
+    def model_name(self):
+        if (1, 4) <= _VERSION <= (1, 7):
+            return self.relation.var_name
+        else:
+            return self.relation.related_model._meta.model_name
+
+
+class ModelOptions(object):
+
+    u"""Совместимые параметры модели (``Model._meta``).
+
+    Предоставляет набор методов, которые были доступны в Django<=1.7, а в
+    Django>=1.8 были помечены, как устаревшие и будут удалены в Django 2.0.
+
+    .. seealso::
+
+       `Migrating from the old API <https://goo.gl/mzdNSH>`_.
+    """
+
+    def __init__(self, model):
+        self.model = model if isclass(model) else model.__class__
+        self.opts = getattr(model, '_meta', None)
+        self.is_django_model = (
+            self.opts is None or
+            issubclass(self.model, Model)
+        )
+
+    def get_field(self, name):
+        if not self.is_django_model or (1, 4) <= _VERSION <= (1, 7):
+            return self.opts.get_field(name)
+        else:
+            field = self.opts.get_field(name)
+
+            if (field.auto_created or
+                    field.is_relation and field.related_model is None):
+                raise FieldDoesNotExist(u"{} has no field named '{}'"
+                                        .format(self.model.__name__, name))
+
+            if hasattr(field, 'related'):
+                field.related.parent_model = field.related.to
+
+            return field
+
+    def get_field_by_name(self, name):
+        if not self.is_django_model or (1, 4) <= _VERSION <= (1, 7):
+            return self.opts.get_field_by_name(name)
+        else:
+            field = self.opts.get_field(name)
+
+            return (
+                field,
+                field.model,
+                not field.auto_created or field.concrete,
+                field.many_to_many,
+            )
+
+    def get_all_related_objects(self):
+        if not self.is_django_model or (1, 4) <= _VERSION <= (1, 7):
+            return [
+                RelatedObject(relation)
+                for relation in self.model._meta.get_all_related_objects()
+            ]
+        else:
+            return [
+                RelatedObject(field)
+                for field in self.model._meta.get_fields()
+                if (
+                    (field.one_to_many or field.one_to_one) and
+                    field.auto_created
+                )
+            ]
+
+    def get_m2m_with_model(self):
+        if not self.is_django_model or (1, 4) <= _VERSION <= (1, 7):
+            return self.opts.get_m2m_with_model()
+        else:
+            return [
+                (
+                    field,
+                    field.model if field.model != self.model else None
+                )
+                for field in self.opts.get_fields()
+                if field.many_to_many and not field.auto_created
+            ]
 # -----------------------------------------------------------------------------
