@@ -353,3 +353,24 @@ class ModelOptions(object):
                 if field.many_to_many and not field.auto_created
             ]
 # -----------------------------------------------------------------------------
+# Доступ к HttpRequest.REQUEST
+
+
+def get_request_params(request):
+    u"""Возвращает параметры HTTP-запроса вне зависимости от его типа.
+
+    В Django<=1.8 параметры были доступны в атрибуте ``REQUEST``, но в
+    Django>=1.9 этот атрибут был удален (в 1.7 - помечен, как устаревший).
+    """
+    if (1, 4) <= _VERSION <= (1, 7):
+        result = request.REQUEST
+    else:
+        if request.method == 'GET':
+            result = request.GET
+        elif request.method == 'POST':
+            result = request.POST
+        else:
+            result = {}
+
+    return result
+# -----------------------------------------------------------------------------
