@@ -1,0 +1,20 @@
+script: true
+install: true
+language: python
+python:
+- '2.7'
+
+deploy:
+  provider: pypi
+  server: http://pypi.bars-open.ru/
+  user: fred
+  on:
+    tags: true
+  distributions: sdist
+  password:
+    secure: S/S8IWWxD3xHqaCOxEgSRJoCeWtz0QBdh7Zzu+YhLjNyllxP9+SYY38uUqS72LDli7m6l8OBBMLbx0oX6I5U50k0ELiyjLa/TRJLjBdnqpCzzhdcGnrCsSKWbuqrkLxKk1hDxTone3C2+/jdwDLt7Mp9lEylGwzAStztOi1CnOs19Jk0zVx4R4teIvPCcU4K9K/w4JjOquRrNpZZcAwifh9c0f5Zjl60iluUq+k/TXy5ShodFnmQhKIGCtrqE6W33Y6Z+FEOIysEL8N9MGejP79lEVYc66R/gian5EF7aFxBFCgS8SUK90PjncRh/hRvgR3+b7WS/8WthejEk1qV7u5Apdw3he4x5yurhGlMMjFLsHxe10jK0dLRfAGAvP9NwuhYnktxjl61hXXNazlWP2Y5bDCkeOd32cQkkVObsaBOJkm1I+TEZ7c7PEUetfmMT8Zeuo7XScwY9zXjnc5rqQ6iQ+TSu/CfR3FHix5LzMDVXZog/EXx/7yHhZlFZQT790MiQK2vVBQ9Jx1DLa4RfVHNtiWDeoZ6PCbb3/9tXN5WRmtD0Swhyfb7dfqEhhjxyj7QWBNfWj9nqFlcc+ffQrYIc+ct0iRJaAQX9vck72jWtCndArkVGyhDHkQJpEzaWVFRSzZuP62CRiOpyfsMvBnMtkuczHIDAAMSioDH2ss=
+
+notifications:
+  email:
+    recipients:
+    - dev-py@bars-open.ru
