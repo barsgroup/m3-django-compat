@@ -1,4 +1,6 @@
 # coding: utf-8
+from abc import ABCMeta
+from abc import abstractmethod
 from inspect import isclass
 from itertools import chain
 
@@ -7,9 +9,8 @@ from django.conf import settings
 from django.db import transaction as _transaction
 from django.db.models.base import Model
 from django.db.models.fields import FieldDoesNotExist
+from django.db.models.fields.related import ForeignKey
 from django.db.models.manager import Manager as _Manager
-from abc import ABCMeta
-from abc import abstractmethod
 
 
 _VERSION = VERSION[:2]
@@ -213,6 +214,13 @@ class Manager(_Manager):
     :class:`django.db.models.manager.Manager`.
     """
 
+    if (1, 6) <= _VERSION <= (1, 7):
+        # Подавление предупреждения о необходимости переименования методов.
+        from django.db.models.manager import RenameManagerMethods
+
+        class __metaclass__(RenameManagerMethods):
+            renamed_methods = ()
+
     def __get_queryset_method(self):
         if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 5):
             result = super(Manager, self).get_query_set
@@ -257,13 +265,16 @@ else:
 
 class RelatedObject(object):
 
-    u"""Зависимый объект."""
+    u"""Совместимый аналог RelatedObject."""
 
     def __init__(self, relation):
         self.relation = relation
 
     def __repr__(self, *args, **kwargs):
-        return 'RelatedObject: ' + repr(self.relation)
+        return '{}: {}'.format(self.__class__.__name__, self.relation)
+
+    def __getattr__(self, name):
+        return getattr(self.relation, name)
 
     @property
     def model_name(self):
@@ -271,6 +282,26 @@ class RelatedObject(object):
             return self.relation.var_name
         else:
             return self.relation.related_model._meta.model_name
+
+    @property
+    def parent_model(self):
+        return self.relation.model
+
+
+def get_related(field):
+    u"""Возвращает RelatedObject для поля модели.
+
+    :param field: Поле модели.
+    :type field: django.db.models.fields.related.ForeignKey
+    """
+    assert isinstance(field, ForeignKey), field
+
+    if _VERSION <= (1, 7):
+        return field.related
+    elif _VERSION == (1, 8):
+        return RelatedObject(field.related)
+    else:
+        return RelatedObject(field.remote_field)
 
 
 class ModelOptions(object):
@@ -304,9 +335,6 @@ class ModelOptions(object):
                     field.is_relation and field.related_model is None):
                 raise FieldDoesNotExist(u"{} has no field named '{}'"
                                         .format(self.model.__name__, name))
-
-            if hasattr(field, 'related'):
-                field.related.parent_model = field.related.to
 
             return field
 

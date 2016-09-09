@@ -14,6 +14,7 @@ from m3_django_compat import RelatedObject
 from m3_django_compat import _VERSION
 from m3_django_compat import atomic
 from m3_django_compat import get_model
+from m3_django_compat import get_related
 from m3_django_compat import get_user_model
 from m3_django_compat import in_atomic_block
 
@@ -173,7 +174,6 @@ class ModelOptionsTestCase(TestCase):
                 model=get_model('myapp', 'Model2'),
                 fields=(
                     ('simple_field', models.CharField),
-                    ('fk_field', models.ForeignKey),
                 ),
             ),
             dict(
@@ -194,6 +194,13 @@ class ModelOptionsTestCase(TestCase):
 
                 f, _, _, _ = opts.get_field_by_name(field_name)
                 self.assertIsInstance(f, field_type, field_type)
+        # ---------------------------------------------------------------------
+
+        opts = ModelOptions(get_model('myapp', 'Model2'))
+        field = opts.get_field('fk_field')
+        related = get_related(field)
+        self.assertIsNotNone(related)
+        self.assertIs(related.parent_model, get_model('myapp', 'Model1'))
 
     def test__get_m2m_with_model__method(self):
         data = (
