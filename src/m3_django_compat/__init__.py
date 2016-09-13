@@ -86,8 +86,8 @@ def get_user_model():
     elif _14:
         result = get_model('auth', 'User')
     else:
-        from django.contrib.auth import get_user_model
-        result = get_user_model()
+        from django.contrib.auth import get_user_model as _get_user_model
+        result = _get_user_model()
 
     return result
 # -----------------------------------------------------------------------------
@@ -403,6 +403,36 @@ def get_request_params(request):
             result = {}
 
     return result
+# -----------------------------------------------------------------------------
+
+
+if _VERSION <= (1, 7):
+    from django.template.loader import get_template
+else:
+    class TemplateAdapter(object):
+
+        def __init__(self, template):
+            self._template = template
+
+        def __getattr__(self, name):
+            return getattr(self._template, name)
+
+        def render(self, context=None, request=None):
+            from django.template.context import Context as C
+            from django.template.context import RequestContext as RC
+
+            if isinstance(context, RC):
+                return self._template.render(
+                    context.flatten(), context.request
+                )
+            elif isinstance(context, C):
+                return self._template.render(context.flatten())
+            else:
+                return self._template.render(context, request)
+
+    def get_template(*args, **kwargs):
+        from django.template.loader import get_template as _get_template
+        return TemplateAdapter(_get_template(*args, **kwargs))
 # -----------------------------------------------------------------------------
 
 

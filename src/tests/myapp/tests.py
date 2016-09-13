@@ -287,3 +287,24 @@ class DatabaseRouterTestCase(TestCase):
                 router.allow_migrate(DEFAULT_DB_ALIAS, 'user', 'CustomUser')
             )
 # -----------------------------------------------------------------------------
+
+
+class GetTemplateTestCase(TestCase):
+
+    def test__get_template__function(self):
+        u"""Проверка правильности работы функции get_template."""
+        from django.http import HttpRequest
+        from django.template.context import RequestContext
+        from m3_django_compat import get_template
+
+        request = HttpRequest()
+        request.user = get_user_model()(username='testuser')
+        context = RequestContext(request, {'var': 'value'})
+
+        template = get_template('get_template.html')
+
+        self.assertEquals(
+            template.render(context),
+            '<p>value</p><p>testuser</p>'
+        )
+# -----------------------------------------------------------------------------
