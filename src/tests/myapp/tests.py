@@ -6,6 +6,7 @@ from django.db.models.query import QuerySet
 from django.db.utils import DEFAULT_DB_ALIAS
 from django.test import SimpleTestCase
 from django.test import TestCase
+from django.test import Client
 
 from m3_django_compat import AUTH_USER_MODEL
 from m3_django_compat import DatabaseRouterBase
@@ -307,4 +308,16 @@ class GetTemplateTestCase(TestCase):
             template.render(context),
             '<p>value</p><p>testuser</p>'
         )
+# -----------------------------------------------------------------------------
+
+
+class TestUrlPatterns(SimpleTestCase):
+
+    u"""Проверка работоспособности описания совместимых urlpatterns."""
+
+    def test__urlpatterns(self):
+        client = Client()
+        response = client.get('/test/')
+        self.assertEquals(response.status_code, 200)
+        self.assertEquals(response.content, '<html></html>')
 # -----------------------------------------------------------------------------
