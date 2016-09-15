@@ -3,17 +3,21 @@ from warnings import catch_warnings
 
 from django.db import models
 from django.db.models.query import QuerySet
+from django.db.utils import DEFAULT_DB_ALIAS
 from django.test import SimpleTestCase
 from django.test import TestCase
+from django.test import Client
 
 from m3_django_compat import AUTH_USER_MODEL
-from m3_django_compat import Manager
+from m3_django_compat import DatabaseRouterBase
 from m3_django_compat import ModelOptions
+from m3_django_compat import RelatedObject
+from m3_django_compat import _VERSION
 from m3_django_compat import atomic
 from m3_django_compat import get_model
+from m3_django_compat import get_related
 from m3_django_compat import get_user_model
 from m3_django_compat import in_atomic_block
-from m3_django_compat import RelatedObject
 
 
 # -----------------------------------------------------------------------------
@@ -171,7 +175,6 @@ class ModelOptionsTestCase(TestCase):
                 model=get_model('myapp', 'Model2'),
                 fields=(
                     ('simple_field', models.CharField),
-                    ('fk_field', models.ForeignKey),
                 ),
             ),
             dict(
@@ -192,6 +195,13 @@ class ModelOptionsTestCase(TestCase):
 
                 f, _, _, _ = opts.get_field_by_name(field_name)
                 self.assertIsInstance(f, field_type, field_type)
+        # ---------------------------------------------------------------------
+
+        opts = ModelOptions(get_model('myapp', 'Model2'))
+        field = opts.get_field('fk_field')
+        related = get_related(field)
+        self.assertIsNotNone(related)
+        self.assertIs(related.parent_model, get_model('myapp', 'Model1'))
 
     def test__get_m2m_with_model__method(self):
         data = (
@@ -247,4 +257,67 @@ class ModelOptionsTestCase(TestCase):
                 isinstance(ro, RelatedObject)
                 for ro in related_objects
             ))
+# -----------------------------------------------------------------------------
+# Проверка базового класса для роутеров баз данных
+
+
+class TestRouter(DatabaseRouterBase):
+
+    def _allow(self, db, app_label, model_name):
+        return (
+            db == DEFAULT_DB_ALIAS and
+            get_model(app_label, model_name) is get_user_model()
+        )
+
+
+class DatabaseRouterTestCase(TestCase):
+
+    def test_database_router(self):
+        router = TestRouter()
+
+        if _VERSION <= (1, 6):
+            self.assertTrue(
+                router.allow_syncdb(DEFAULT_DB_ALIAS, get_user_model())
+            )
+        elif _VERSION == (1, 7):
+            self.assertTrue(
+                router.allow_migrate(DEFAULT_DB_ALIAS, get_user_model())
+            )
+        else:
+            self.assertTrue(
+                router.allow_migrate(DEFAULT_DB_ALIAS, 'user', 'CustomUser')
+            )
+# -----------------------------------------------------------------------------
+
+
+class GetTemplateTestCase(TestCase):
+
+    def test__get_template__function(self):
+        u"""Проверка правильности работы функции get_template."""
+        from django.http import HttpRequest
+        from django.template.context import RequestContext
+        from m3_django_compat import get_template
+
+        request = HttpRequest()
+        request.user = get_user_model()(username='testuser')
+        context = RequestContext(request, {'var': 'value'})
+
+        template = get_template('get_template.html')
+
+        self.assertEquals(
+            template.render(context),
+            '<p>value</p><p>testuser</p>'
+        )
+# -----------------------------------------------------------------------------
+
+
+class TestUrlPatterns(SimpleTestCase):
+
+    u"""Проверка работоспособности описания совместимых urlpatterns."""
+
+    def test__urlpatterns(self):
+        client = Client()
+        response = client.get('/test/')
+        self.assertEquals(response.status_code, 200)
+        self.assertEquals(response.content, '<html></html>')
 # -----------------------------------------------------------------------------

@@ -1,4 +1,6 @@
 # coding: utf-8
+from abc import ABCMeta
+from abc import abstractmethod
 from inspect import isclass
 from itertools import chain
 
@@ -7,6 +9,7 @@ from django.conf import settings
 from django.db import transaction as _transaction
 from django.db.models.base import Model
 from django.db.models.fields import FieldDoesNotExist
+from django.db.models.fields.related import ForeignKey
 from django.db.models.manager import Manager as _Manager
 
 
@@ -16,10 +19,8 @@ _14 = _VERSION == (1, 4)
 #: Минимальная подерживаемая версия Django.
 MIN_SUPPORTED_VERSION = (1, 4)
 
-
 #: Максимальная поддерживаемая версия Django.
-MAX_SUPPORTED_VERSION = (1, 9)
-
+MAX_SUPPORTED_VERSION = (1, 10)
 
 assert MIN_SUPPORTED_VERSION <= _VERSION <= MAX_SUPPORTED_VERSION, (
     'Unsupported Django version: {}.{}'.format(*_VERSION)
@@ -36,14 +37,12 @@ def get_model(app_label, model_name):
 
     :rtype: :class:`django.db.models.base.ModelBase`
     """
-    if (1, 4) <= _VERSION <= (1, 6):
+    if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 6):
         from django.db.models.loading import get_model
         result = get_model(app_label, model_name)
-    elif (1, 7) <= _VERSION <= (1, 9):
+    else:
         from django.apps import apps
         result = apps.get_model(app_label, model_name)
-    else:
-        raise
 
     return result
 # -----------------------------------------------------------------------------
@@ -87,8 +86,8 @@ def get_user_model():
     elif _14:
         result = get_model('auth', 'User')
     else:
-        from django.contrib.auth import get_user_model
-        result = get_user_model()
+        from django.contrib.auth import get_user_model as _get_user_model
+        result = _get_user_model()
 
     return result
 # -----------------------------------------------------------------------------
@@ -104,7 +103,7 @@ def in_atomic_block(using=None):
 
     :rtype: bool
     """
-    if (1, 4) <= _VERSION <= (1, 5):
+    if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 5):
         result = _transaction.is_managed(using)
     else:
         result = _transaction.get_connection(using).in_atomic_block
@@ -112,7 +111,7 @@ def in_atomic_block(using=None):
     return result
 
 
-if (1, 4) <= _VERSION <= (1, 5):
+if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 5):
     class _Atomic(object):
 
         def __init__(self, savepoint):
@@ -165,7 +164,7 @@ def atomic(using=None, savepoint=True):
     :param bool savepoint: Определяет, будут ли использоваться точки сохранения
         (savepoints) при использовании вложенных ``atomic``.
     """
-    if (1, 4) <= _VERSION <= (1, 5):
+    if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 5):
         if callable(using):
             # atomic вызван как декоратор без параметров
             from django.db.utils import DEFAULT_DB_ALIAS
@@ -193,7 +192,7 @@ def commit_unless_managed(using=None):
     В Django 1.6+ эта функция была помечена, как устаревшая, а в Django 1.8+
     была удалена.
     """
-    if (1, 4) <= _VERSION <= (1, 5):
+    if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 5):
         from django.db.transaction import commit_unless_managed as func
         return func(using)
 # -----------------------------------------------------------------------------
@@ -215,8 +214,15 @@ class Manager(_Manager):
     :class:`django.db.models.manager.Manager`.
     """
 
+    if (1, 6) <= _VERSION <= (1, 7):
+        # Подавление предупреждения о необходимости переименования методов.
+        from django.db.models.manager import RenameManagerMethods
+
+        class __metaclass__(RenameManagerMethods):
+            renamed_methods = ()
+
     def __get_queryset_method(self):
-        if (1, 4) <= _VERSION <= (1, 5):
+        if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 5):
             result = super(Manager, self).get_query_set
         else:
             result = super(Manager, self).get_queryset
@@ -232,7 +238,7 @@ class Manager(_Manager):
         return self.__get_queryset_method()
 
     def __get_prefetch_queryset_method(self):
-        if (1, 4) <= _VERSION <= (1, 5):
+        if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 5):
             result = super(Manager, self).get_prefetch_query_set
         else:
             result = super(Manager, self).get_prefetch_queryset
@@ -249,7 +255,7 @@ class Manager(_Manager):
 # -----------------------------------------------------------------------------
 # Базовый класс для загрузчика шаблонов
 
-if (1, 4) <= _VERSION <= (1, 7):
+if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7):
     from django.template.loader import BaseLoader
 else:
     from django.template.loaders.base import Loader as BaseLoader
@@ -259,20 +265,43 @@ else:
 
 class RelatedObject(object):
 
-    u"""Зависимый объект."""
+    u"""Совместимый аналог RelatedObject."""
 
     def __init__(self, relation):
         self.relation = relation
 
     def __repr__(self, *args, **kwargs):
-        return 'RelatedObject: ' + repr(self.relation)
+        return '{}: {}'.format(self.__class__.__name__, self.relation)
+
+    def __getattr__(self, name):
+        return getattr(self.relation, name)
 
     @property
     def model_name(self):
-        if (1, 4) <= _VERSION <= (1, 7):
+        if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7):
             return self.relation.var_name
         else:
             return self.relation.related_model._meta.model_name
+
+    @property
+    def parent_model(self):
+        return self.relation.model
+
+
+def get_related(field):
+    u"""Возвращает RelatedObject для поля модели.
+
+    :param field: Поле модели.
+    :type field: django.db.models.fields.related.ForeignKey
+    """
+    assert isinstance(field, ForeignKey), field
+
+    if _VERSION <= (1, 7):
+        return field.related
+    elif _VERSION == (1, 8):
+        return RelatedObject(field.related)
+    else:
+        return RelatedObject(field.remote_field)
 
 
 class ModelOptions(object):
@@ -296,7 +325,8 @@ class ModelOptions(object):
         )
 
     def get_field(self, name):
-        if not self.is_django_model or (1, 4) <= _VERSION <= (1, 7):
+        if (not self.is_django_model or
+                MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7)):
             return self.opts.get_field(name)
         else:
             field = self.opts.get_field(name)
@@ -306,13 +336,11 @@ class ModelOptions(object):
                 raise FieldDoesNotExist(u"{} has no field named '{}'"
                                         .format(self.model.__name__, name))
 
-            if hasattr(field, 'related'):
-                field.related.parent_model = field.related.to
-
             return field
 
     def get_field_by_name(self, name):
-        if not self.is_django_model or (1, 4) <= _VERSION <= (1, 7):
+        if (not self.is_django_model or
+                MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7)):
             return self.opts.get_field_by_name(name)
         else:
             field = self.opts.get_field(name)
@@ -325,7 +353,8 @@ class ModelOptions(object):
             )
 
     def get_all_related_objects(self):
-        if not self.is_django_model or (1, 4) <= _VERSION <= (1, 7):
+        if (not self.is_django_model or
+                MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7)):
             return [
                 RelatedObject(relation)
                 for relation in self.model._meta.get_all_related_objects()
@@ -341,7 +370,8 @@ class ModelOptions(object):
             ]
 
     def get_m2m_with_model(self):
-        if not self.is_django_model or (1, 4) <= _VERSION <= (1, 7):
+        if (not self.is_django_model or
+                MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7)):
             return self.opts.get_m2m_with_model()
         else:
             return [
@@ -362,7 +392,7 @@ def get_request_params(request):
     В Django<=1.8 параметры были доступны в атрибуте ``REQUEST``, но в
     Django>=1.9 этот атрибут был удален (в 1.7 - помечен, как устаревший).
     """
-    if (1, 4) <= _VERSION <= (1, 7):
+    if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7):
         result = request.REQUEST
     else:
         if request.method == 'GET':
@@ -373,4 +403,74 @@ def get_request_params(request):
             result = {}
 
     return result
+# -----------------------------------------------------------------------------
+
+
+if _VERSION <= (1, 7):
+    from django.template.loader import get_template
+else:
+    class TemplateAdapter(object):
+
+        def __init__(self, template):
+            self._template = template
+
+        def __getattr__(self, name):
+            return getattr(self._template, name)
+
+        def render(self, context=None, request=None):
+            from django.template.context import Context as C
+            from django.template.context import RequestContext as RC
+
+            if isinstance(context, RC):
+                return self._template.render(
+                    context.flatten(), context.request
+                )
+            elif isinstance(context, C):
+                return self._template.render(context.flatten())
+            else:
+                return self._template.render(context, request)
+
+    def get_template(*args, **kwargs):
+        from django.template.loader import get_template as _get_template
+        return TemplateAdapter(_get_template(*args, **kwargs))
+# -----------------------------------------------------------------------------
+
+
+class DatabaseRouterBase(object):
+
+    u"""Базовый класс для роутеров баз данных.
+
+    Обеспечивает совместимость роутера для разных версий Django в части методов
+    :meth:`allow_sync` и :meth:`allow_migrate`.
+
+    В потомках нужно реализовать метод :meth:`_allow`.
+    """
+
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def _allow(self, db, app_label, model_name):
+        u"""Возвращает True, если разрешена синхронизация/миграция для модели.
+
+        :param str db: Алиас базы данных.
+        :param str app_label: Название приложения.
+        :param str model_name: Имя модели.
+        :param model: Класс модели.
+
+        :rtype: bool
+        """
+
+    if _VERSION <= (1, 6):
+        def allow_syncdb(self, db, model):
+            app_label = model._meta.app_label
+            model_name = model.__name__
+            return self._allow(db, app_label, model_name)
+    elif _VERSION == (1, 7):
+        def allow_migrate(self, db, model):
+            app_label = model._meta.app_label
+            model_name = model.__name__
+            return self._allow(db, app_label, model_name)
+    else:
+        def allow_migrate(self, db, app_label, model_name=None, **hints):
+            return self._allow(db, app_label, model_name)
 # -----------------------------------------------------------------------------

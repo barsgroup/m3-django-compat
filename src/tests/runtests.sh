@@ -21,7 +21,7 @@ if [ -z "$args" ] ; then
     export args=myapp
 fi
 
-$COVERAGE $DJANGO_ADMIN test --traceback --settings=$DJANGO_SETTINGS_MODULE --verbosity 2 --pythonpath="../" "$args"
+$COVERAGE $DJANGO_ADMIN test --traceback --settings=$DJANGO_SETTINGS_MODULE --pythonpath="../" "$args"
 
 if [ `which coverage` ] ; then
     coverage report
