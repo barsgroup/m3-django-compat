@@ -1,16 +1,21 @@
 # coding: utf-8
 from abc import ABCMeta
 from abc import abstractmethod
+from argparse import ArgumentParser
 from inspect import isclass
-from itertools import chain
+import os
+import sys
 
 from django import VERSION
 from django.conf import settings
+from django.core import management
+from django.db import connections
 from django.db import transaction as _transaction
 from django.db.models.base import Model
 from django.db.models.fields import FieldDoesNotExist
 from django.db.models.fields.related import ForeignKey
 from django.db.models.manager import Manager as _Manager
+from django.utils.functional import cached_property
 
 
 _VERSION = VERSION[:2]
@@ -455,7 +460,6 @@ class DatabaseRouterBase(object):
         :param str db: Алиас базы данных.
         :param str app_label: Название приложения.
         :param str model_name: Имя модели.
-        :param model: Класс модели.
 
         :rtype: bool
         """
@@ -473,4 +477,105 @@ class DatabaseRouterBase(object):
     else:
         def allow_migrate(self, db, app_label, model_name=None, **hints):
             return self._allow(db, app_label, model_name)
+# -----------------------------------------------------------------------------
+
+
+class CommandParser(ArgumentParser):
+
+    def __init__(self, cmd, **kwargs):
+        self.cmd = cmd
+        super(CommandParser, self).__init__(**kwargs)
+
+    def parse_args(self, args=None, namespace=None):
+        # Catch missing argument for a better error message
+        if (hasattr(self.cmd, 'missing_args_message') and
+                not (args or any(
+                    not arg.startswith('-') for arg in args))):
+            self.error(self.cmd.missing_args_message)
+        return super(CommandParser, self).parse_args(args,
+                                                     namespace)
+
+    def error(self, message):
+        if self.cmd._called_from_command_line:
+            super(CommandParser, self).error(message)
+        else:
+            raise management.CommandError("Error: %s" % message)
+
+
+class BaseCommand(management.BaseCommand):
+
+    u"""Базовый класс для management-команд, использующий argparse."""
+
+    def add_arguments(self, parser):
+        pass
+
+    def create_parser(self, prog_name, subcommand):
+        parser = CommandParser(
+            self, prog="%s %s" % (os.path.basename(prog_name), subcommand),
+            description=self.help or None,
+        )
+        parser.add_argument('--version', action='version',
+                            version=self.get_version())
+        parser.add_argument(
+            '-v', '--verbosity', action='store', dest='verbosity',
+            default=1,
+            type=int, choices=[0, 1, 2, 3],
+            help='Verbosity level; 0=minimal output, 1=normal output, '
+                 '2=verbose output, 3=very verbose output',
+        )
+        parser.add_argument(
+            '--settings',
+            help=(
+                'The Python path to a settings module, e.g. '
+                '"myproject.settings.main". If this isn\'t provided, the '
+                'DJANGO_SETTINGS_MODULE environment variable will be used.'
+            ),
+        )
+        parser.add_argument(
+            '--pythonpath',
+            help='A directory to add to the Python path, e.g. '
+                 '"/home/djangoprojects/myproject".',
+        )
+        parser.add_argument('--traceback', action='store_true',
+                            help='Raise on CommandError exceptions')
+
+        if _VERSION >= (1, 7):
+            parser.add_argument(
+                '--no-color', action='store_true', dest='no_color',
+                default=False,
+                help="Don't colorize the command output.",
+            )
+
+        parser.add_argument('args', nargs='*')
+
+        self.add_arguments(parser)
+
+        return parser
+
+    if _VERSION < (1, 8):
+        def run_from_argv(self, argv):
+            from django.core.management import handle_default_options
+            from django.core.management import CommandError
+
+            self._called_from_command_line = True
+            parser = self.create_parser(argv[0], argv[1])
+
+            options = parser.parse_args(argv[2:])
+            cmd_options = vars(options)
+            # Move positional args out of options to mimic legacy optparse
+            args = cmd_options.pop('args', ())
+
+            handle_default_options(options)
+            try:
+                self.execute(*args, **cmd_options)
+            except Exception as e:
+                if options.traceback or not isinstance(e, CommandError):
+                    raise
+
+                # SystemCheckError takes care of its own formatting.
+                if isinstance(e, CommandError):
+                    self.stderr.write(str(e), lambda x: x)
+                else:
+                    self.stderr.write('%s: %s' % (e.__class__.__name__, e))
+                sys.exit(1)
 # -----------------------------------------------------------------------------

@@ -1,12 +1,19 @@
 # coding: utf-8
+from StringIO import StringIO
 from warnings import catch_warnings
+import atexit
+import json
+import os.path
+import subprocess
+import sys
 
+from django.core.management import load_command_class, call_command
 from django.db import models
 from django.db.models.query import QuerySet
 from django.db.utils import DEFAULT_DB_ALIAS
+from django.test import Client
 from django.test import SimpleTestCase
 from django.test import TestCase
-from django.test import Client
 
 from m3_django_compat import AUTH_USER_MODEL
 from m3_django_compat import DatabaseRouterBase
@@ -320,4 +327,147 @@ class TestUrlPatterns(SimpleTestCase):
         response = client.get('/test/')
         self.assertEquals(response.status_code, 200)
         self.assertEquals(response.content, '<html></html>')
+# -----------------------------------------------------------------------------
+
+
+class _StreamReplacer(object):
+
+    # Нужен в связи с тем, что в Django 1.4 еще не было возможности
+    # использовать альтернативный поток вывода.
+
+    def __init__(self, stdout, stderr):
+        self._stdout = stdout
+        self._stderr = stderr
+
+    def __enter__(self):
+        sys.stdout, self._sys_stdout = self._stdout, sys.stdout
+        sys.stderr, self._sys_stderr = self._stderr, sys.stderr
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout = self._sys_stdout
+        sys.stderr = self._sys_stderr
+
+
+class _ExitHandler(object):
+
+    # Подключает и отключает обработчик выхода из системы. Нужен в связи с
+    # отсутствием atexit.unregister в Python 2.
+
+    def __init__(self, handler, *args, **kwargs):
+        self.__handler = handler
+        self.__args = args
+        self.__kwargs = kwargs
+
+    def __enter__(self):
+        atexit.register(self.__handler, *self.__args, **self.__kwargs)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if hasattr(atexit, 'unregister'):
+            atexit.unregister(self.__handler)
+        else:
+            index = None
+            for i, (handler, _, _) in enumerate(atexit._exithandlers):
+                if handler is self.__handler:
+                    index = i
+                    break
+            if index is None:
+                raise ValueError(self.__handler)
+            else:
+                atexit._exithandlers.pop(index)
+
+
+class BaseCommandTestCase(SimpleTestCase):
+
+    u"""Проверка базового класса для management-команд."""
+
+    def __exit_handler(self):
+        if self.__stdout and self.__stderr:
+            print self.__stdout.getvalue()
+            print self.__stderr.getvalue()
+
+    def setUp(self):
+        self.__stdout = StringIO()
+        self.__stderr = StringIO()
+
+    def tearDown(self):
+        self.__stdout.close()
+        self.__stdout = None
+
+        self.__stderr.close()
+        self.__stderr = None
+
+    def __check_result(self, output, errors):
+        self.assertFalse(errors)
+
+        args, kwargs = map(json.loads, output.split('\n')[:2])
+
+        self.assertEqual(args, ['asd', '1'])
+
+        for arg in ('verbosity', 'traceback', 'settings', 'pythonpath',
+                    'test1', 'test2', 'test3'):
+            self.assertIn(arg, kwargs)
+        self.assertEqual(kwargs['verbosity'], 0)
+        self.assertEqual(kwargs['traceback'], True)
+        self.assertEqual(kwargs['test1'], 'qwe')
+        self.assertTrue(kwargs['test2'])
+        self.assertEqual(kwargs['test3'], 1)
+
+    def test__run_from_argv(self):
+        with _StreamReplacer(self.__stdout, self.__stderr):
+            command = load_command_class('myapp', 'test_command')
+
+            with _ExitHandler(self.__exit_handler):
+                command.run_from_argv([
+                    'python', 'test_command',
+                    '-v', '0',
+                    '--traceback',
+                    '--test1', 'qwe',
+                    '--test2',
+                    '--test3', '1',
+                    'asd', '1',
+                ])
+
+        self.__check_result(self.__stdout.getvalue(), self.__stderr.getvalue())
+
+    def test__call_command(self):
+        with _StreamReplacer(self.__stdout, self.__stderr):
+            with _ExitHandler(self.__exit_handler):
+                call_command(
+                    'test_command',
+                    'asd', '1',
+                    verbosity=0,
+                    traceback=True,
+                    test1='qwe',
+                    test2=True,
+                    test3=1,
+                )
+
+        self.__check_result(self.__stdout.getvalue(), self.__stderr.getvalue())
+
+    def test__command_line(self):
+        process = subprocess.Popen(
+            [
+                sys.argv[0],
+                'test_command',
+                '-v', '0',
+                '--traceback',
+                '--test1', 'qwe',
+                '--test2',
+                '--test3', '1',
+                'asd', '1'
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        process.wait()
+
+        output = process.stdout.read()
+        errors = process.stderr.read()
+
+        if process.returncode != 0:
+            print output
+            print errors
+        else:
+            self.assertEqual(process.returncode, 0)
+            self.__check_result(output, errors)
 # -----------------------------------------------------------------------------
