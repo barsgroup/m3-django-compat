@@ -260,6 +260,7 @@ class Manager(_Manager):
 # -----------------------------------------------------------------------------
 # Базовый класс для загрузчика шаблонов
 
+
 if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7):
     from django.template.loader import BaseLoader
 else:
@@ -411,33 +412,80 @@ def get_request_params(request):
 # -----------------------------------------------------------------------------
 
 
-if _VERSION <= (1, 7):
-    from django.template.loader import get_template
-else:
-    class TemplateAdapter(object):
+class TemplateWrapper(object):
 
-        def __init__(self, template):
-            self._template = template
+    u"""Класс-обертка для шаблонов Django.
 
-        def __getattr__(self, name):
-            return getattr(self._template, name)
+    Обеспечивает возможность передачи в метод ``render`` как экземпляров
+    :class:`django.template.Context` или
+    :class:`django.template.RequestContext`, либо словарей.
+    """
 
-        def render(self, context=None, request=None):
-            from django.template.context import Context as C
-            from django.template.context import RequestContext as RC
+    def __init__(self, template):
+        self._template = template
 
-            if isinstance(context, RC):
+    def __getattr__(self, name):
+        return getattr(self._template, name)
+
+    def render(self, context=None, request=None):
+        from django.template.context import Context as C
+        from django.template.context import RequestContext as RC
+        # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+        if isinstance(context, C) and _VERSION <= (1, 6):
+            # Backport метода Context.flatten из Django 1.7
+            def flatten(self):
+                flat = {}
+                for d in self.dicts:
+                    flat.update(d)
+                return flat
+
+            from types import MethodType
+
+            context.flatten = MethodType(flatten, context, type(context))
+        # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+        if isinstance(context, RC):
+            if _VERSION <= (1, 7):
+                return self._template.render(context)
+            else:
                 return self._template.render(
                     context.flatten(), context.request
                 )
-            elif isinstance(context, C):
-                return self._template.render(context.flatten())
+
+        elif isinstance(context, C):
+            if _VERSION <= (1, 7):
+                if request:
+                    return self._template.render(
+                        RC(request, context.flatten())
+                    )
+                else:
+                    return self._template.render(context)
+            else:
+                return self._template.render(context.flatten(), request)
+
+        else:
+            if _VERSION <= (1, 7):
+                if request:
+                    return self._template.render(RC(request, context))
+                else:
+                    return self._template.render(C(context))
             else:
                 return self._template.render(context, request)
 
-    def get_template(*args, **kwargs):
-        from django.template.loader import get_template as _get_template
-        return TemplateAdapter(_get_template(*args, **kwargs))
+
+def get_template(*args, **kwargs):
+    u"""Совместимый аналог функции :func:`django.template.loader.get_template`.
+
+    Позволяет вызывать метод ``render()`` шаблона передавая в качестве
+    аргумента экземпляры :class:`django.template.Context`,
+    :class:`django.template.RequestContext` или :class:`dict` вне зависимости
+    от версии Django.
+
+    :rtype: django.template.Template
+    """
+    from django.template.loader import get_template as _get_template
+    return TemplateWrapper(_get_template(*args, **kwargs))
 # -----------------------------------------------------------------------------
 
 
