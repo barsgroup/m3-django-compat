@@ -3,7 +3,6 @@ from StringIO import StringIO
 from warnings import catch_warnings
 import atexit
 import json
-import os.path
 import subprocess
 import sys
 
@@ -14,7 +13,6 @@ from django.db.utils import DEFAULT_DB_ALIAS
 from django.test import Client
 from django.test import SimpleTestCase
 from django.test import TestCase
-
 from m3_django_compat import AUTH_USER_MODEL
 from m3_django_compat import DatabaseRouterBase
 from m3_django_compat import ModelOptions
@@ -302,17 +300,33 @@ class GetTemplateTestCase(TestCase):
     def test__get_template__function(self):
         u"""Проверка правильности работы функции get_template."""
         from django.http import HttpRequest
+        from django.template.context import Context
         from django.template.context import RequestContext
         from m3_django_compat import get_template
 
         request = HttpRequest()
         request.user = get_user_model()(username='testuser')
-        context = RequestContext(request, {'var': 'value'})
 
         template = get_template('get_template.html')
 
         self.assertEquals(
-            template.render(context),
+            template.render({'var': 'value'}),
+            '<p>value</p><p></p>'
+        )
+        self.assertEquals(
+            template.render(Context({'var': 'value'})),
+            '<p>value</p><p></p>'
+        )
+        self.assertEquals(
+            template.render({'var': 'value'}, request),
+            '<p>value</p><p>testuser</p>'
+        )
+        self.assertEquals(
+            template.render(Context({'var': 'value'}), request),
+            '<p>value</p><p>testuser</p>'
+        )
+        self.assertEquals(
+            template.render(RequestContext(request, {'var': 'value'})),
             '<p>value</p><p>testuser</p>'
         )
 # -----------------------------------------------------------------------------
