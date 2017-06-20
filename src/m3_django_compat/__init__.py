@@ -97,7 +97,10 @@ def get_model(app_label, model_name):
 #:    class Person(models.Model):
 #:        user = models.ForeignKey(AUTH_USER_MODEL)
 AUTH_USER_MODEL = None
-if 'django.contrib.auth' in get_installed_apps():
+if any(
+    app_package_name.startswith('django.contrib.auth')
+    for app_package_name in settings.INSTALLED_APPS
+):
     AUTH_USER_MODEL = 'auth.User' if _14 else settings.AUTH_USER_MODEL
 
 
