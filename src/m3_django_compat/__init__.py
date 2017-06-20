@@ -31,6 +31,31 @@ assert MIN_SUPPORTED_VERSION <= _VERSION <= MAX_SUPPORTED_VERSION, (
     'Unsupported Django version: {}.{}'.format(*_VERSION)
 )
 # -----------------------------------------------------------------------------
+
+
+def get_installed_apps():
+    u"""Возвращает имена пакетов с django-приложениями.
+
+    .. note::
+
+       Невозможность обхода в цикле списка ``INSTALLED_APPS`` обусловлена
+       тем, что начиная с Django 1.7 приложения проекта могут быть указаны
+       как путь до класса с конфигурацией приложения, например как
+       ``project.app1.apps.AppConfig``.
+    """
+    if _VERSION < (1, 7):
+        result = settings.INSTALLED_APPS
+
+    else:
+        from django.apps import apps
+
+        result = (
+            app_config.name
+            for app_config in apps.get_app_configs()
+        )
+
+    return result
+# -----------------------------------------------------------------------------
 # Загрузка модели
 
 
@@ -72,7 +97,7 @@ def get_model(app_label, model_name):
 #:    class Person(models.Model):
 #:        user = models.ForeignKey(AUTH_USER_MODEL)
 AUTH_USER_MODEL = None
-if 'django.contrib.auth' in settings.INSTALLED_APPS:
+if 'django.contrib.auth' in get_installed_apps():
     AUTH_USER_MODEL = 'auth.User' if _14 else settings.AUTH_USER_MODEL
 
 
@@ -86,7 +111,7 @@ def get_user_model():
 
     :rtype: :class:`django.db.models.base.ModelBase` or :class:`NoneType`
     """
-    if 'django.contrib.auth' not in settings.INSTALLED_APPS:
+    if 'django.contrib.auth' not in get_installed_apps():
         result = None
     elif _14:
         result = get_model('auth', 'User')
