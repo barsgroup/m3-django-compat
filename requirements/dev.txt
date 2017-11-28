@@ -2,6 +2,7 @@
 
 fabric3
 tox
+coverage
 isort
 pycodestyle
 pylint
