@@ -1,4 +1,6 @@
 # coding: utf-8
+from __future__ import unicode_literals
+
 from abc import ABCMeta
 from abc import abstractmethod
 from argparse import ArgumentParser
@@ -9,13 +11,14 @@ import sys
 from django import VERSION
 from django.conf import settings
 from django.core import management
-from django.db import connections
 from django.db import transaction as _transaction
+from django.db import connections
 from django.db.models.base import Model
 from django.db.models.fields import FieldDoesNotExist
 from django.db.models.fields.related import ForeignKey
 from django.db.models.manager import Manager as _Manager
 from django.utils.functional import cached_property
+import six
 
 
 _VERSION = VERSION[:2]
@@ -34,7 +37,7 @@ assert MIN_SUPPORTED_VERSION <= _VERSION <= MAX_SUPPORTED_VERSION, (
 
 
 def get_installed_apps():
-    u"""Возвращает имена пакетов с django-приложениями.
+    """Возвращает имена пакетов с django-приложениями.
 
     .. note::
 
@@ -60,7 +63,7 @@ def get_installed_apps():
 
 
 def get_model(app_label, model_name):
-    u"""Возвращает класс модели.
+    """Возвращает класс модели.
 
     :param str app_label: Имя приложения модели.
     :param str model_name: Имя модели (без учета регистра символов).
@@ -68,8 +71,8 @@ def get_model(app_label, model_name):
     :rtype: :class:`django.db.models.base.ModelBase`
     """
     if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 6):
-        from django.db.models.loading import get_model
-        result = get_model(app_label, model_name)
+        from django.db.models.loading import get_model as get_model_
+        result = get_model_(app_label, model_name)
     else:
         from django.apps import apps
         result = apps.get_model(app_label, model_name)
@@ -105,7 +108,7 @@ if any(
 
 
 def get_user_model():
-    u"""Возвращает класс модели учетной записи.
+    """Возвращает класс модели учетной записи.
 
     Если подключено приложение ``'django.contrib.auth'``, то для Django 1.4
     возвращает :class:`django.contrib.auth.models.User`, а для
@@ -128,7 +131,7 @@ def get_user_model():
 
 
 def in_atomic_block(using=None):
-    u"""Возвращает ``True``, если в момент вызова открыта транзакция.
+    """Возвращает ``True``, если в момент вызова открыта транзакция.
 
     Если включен режим автоподтверждения (autocommit), то возвращает ``False``.
 
@@ -152,6 +155,7 @@ if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 5):
             self._sid = None
 
         def entering(self, using):
+            # pylint: disable=attribute-defined-outside-init
             if in_atomic_block(using):
                 if self._savepoint:
                     self._sid = _transaction.savepoint(using)
@@ -177,7 +181,7 @@ if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 5):
                         if _transaction.is_dirty(using=using):
                             try:
                                 _transaction.commit(using=using)
-                            except:
+                            except:  # noqa
                                 _transaction.rollback(using=using)
                                 raise
                 finally:
@@ -185,7 +189,7 @@ if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 5):
 
 
 def atomic(using=None, savepoint=True):
-    u"""Совместимый аналог декоратора/менеджера контекста ``atomic``.
+    """Совместимый аналог декоратора/менеджера контекста ``atomic``.
 
     В Django>=1.6 задействует функционал ``atomic``, а в версиях ниже 1.6
     имитирует его поведение средствами модуля ``django.db.transaction``, при
@@ -206,9 +210,9 @@ def atomic(using=None, savepoint=True):
         else:
             func = None
 
-        atomic = _Atomic(savepoint)
+        atomic_ = _Atomic(savepoint)
         result = _transaction._transaction_func(
-            atomic.entering, atomic.exiting, using
+            atomic_.entering, atomic_.exiting, using
         )
 
         if func:
@@ -220,7 +224,7 @@ def atomic(using=None, savepoint=True):
 
 
 def commit_unless_managed(using=None):
-    u"""Совместимый аналог функции commit_unless_managed.
+    """Совместимый аналог функции commit_unless_managed.
 
     В Django 1.6+ эта функция была помечена, как устаревшая, а в Django 1.8+
     была удалена.
@@ -234,7 +238,7 @@ def commit_unless_managed(using=None):
 
 class Manager(_Manager):
 
-    u"""Базовый класс для менеджеров моделей.
+    """Базовый класс для менеджеров моделей.
 
     Создан в связи с переименованием в Django 1.6 метода ``get_query_set`` в
     ``get_queryset`` и ``get_prefetch_query_set`` в ``get_prefetch_queryset``.
@@ -251,6 +255,7 @@ class Manager(_Manager):
         # Подавление предупреждения о необходимости переименования методов.
         from django.db.models.manager import RenameManagerMethods
 
+        # pylint: disable=invalid-name
         class __metaclass__(RenameManagerMethods):
             renamed_methods = ()
 
@@ -299,7 +304,7 @@ else:
 
 class RelatedObject(object):
 
-    u"""Совместимый аналог RelatedObject."""
+    """Совместимый аналог RelatedObject."""
 
     def __init__(self, relation):
         self.relation = relation
@@ -313,9 +318,10 @@ class RelatedObject(object):
     @property
     def model_name(self):
         if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7):
-            return self.relation.var_name
+            result = self.relation.var_name
         else:
-            return self.relation.related_model._meta.model_name
+            result = self.relation.related_model._meta.model_name
+        return result
 
     @property
     def parent_model(self):
@@ -323,7 +329,7 @@ class RelatedObject(object):
 
 
 def get_related(field):
-    u"""Возвращает RelatedObject для поля модели.
+    """Возвращает RelatedObject для поля модели.
 
     :param field: Поле модели.
     :type field: django.db.models.fields.related.ForeignKey
@@ -331,16 +337,17 @@ def get_related(field):
     assert isinstance(field, ForeignKey), field
 
     if _VERSION <= (1, 7):
-        return field.related
+        result = field.related
     elif _VERSION == (1, 8):
-        return RelatedObject(field.related)
+        result = RelatedObject(field.related)
     else:
-        return RelatedObject(field.remote_field)
+        result = RelatedObject(field.remote_field)
+    return result
 
 
 class ModelOptions(object):
 
-    u"""Совместимые параметры модели (``Model._meta``).
+    """Совместимые параметры модели (``Model._meta``).
 
     Предоставляет набор методов, которые были доступны в Django<=1.7, а в
     Django>=1.8 были помечены, как устаревшие и будут удалены в Django 2.0.
@@ -367,7 +374,7 @@ class ModelOptions(object):
 
             if (field.auto_created or
                     field.is_relation and field.related_model is None):
-                raise FieldDoesNotExist(u"{} has no field named '{}'"
+                raise FieldDoesNotExist("{} has no field named '{}'"
                                         .format(self.model.__name__, name))
 
             return field
@@ -375,26 +382,27 @@ class ModelOptions(object):
     def get_field_by_name(self, name):
         if (not self.is_django_model or
                 MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7)):
-            return self.opts.get_field_by_name(name)
+            result = self.opts.get_field_by_name(name)
         else:
             field = self.opts.get_field(name)
 
-            return (
+            result = (
                 field,
                 field.model,
                 not field.auto_created or field.concrete,
                 field.many_to_many,
             )
+        return result
 
     def get_all_related_objects(self):
         if (not self.is_django_model or
                 MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7)):
-            return [
+            result = [
                 RelatedObject(relation)
                 for relation in self.model._meta.get_all_related_objects()
             ]
         else:
-            return [
+            result = [
                 RelatedObject(field)
                 for field in self.model._meta.get_fields()
                 if (
@@ -402,13 +410,14 @@ class ModelOptions(object):
                     field.auto_created
                 )
             ]
+        return result
 
     def get_m2m_with_model(self):
         if (not self.is_django_model or
                 MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7)):
-            return self.opts.get_m2m_with_model()
+            result = self.opts.get_m2m_with_model()
         else:
-            return [
+            result = [
                 (
                     field,
                     field.model if field.model != self.model else None
@@ -416,12 +425,13 @@ class ModelOptions(object):
                 for field in self.opts.get_fields()
                 if field.many_to_many and not field.auto_created
             ]
+        return result
 # -----------------------------------------------------------------------------
 # Доступ к HttpRequest.REQUEST
 
 
 def get_request_params(request):
-    u"""Возвращает параметры HTTP-запроса вне зависимости от его типа.
+    """Возвращает параметры HTTP-запроса вне зависимости от его типа.
 
     В Django<=1.8 параметры были доступны в атрибуте ``REQUEST``, но в
     Django>=1.9 этот атрибут был удален (в 1.7 - помечен, как устаревший).
@@ -442,7 +452,7 @@ def get_request_params(request):
 
 class TemplateWrapper(object):
 
-    u"""Класс-обертка для шаблонов Django.
+    """Класс-обертка для шаблонов Django.
 
     Обеспечивает возможность передачи в метод ``render`` как экземпляров
     :class:`django.template.Context` или
@@ -475,35 +485,37 @@ class TemplateWrapper(object):
 
         if isinstance(context, RC):
             if _VERSION <= (1, 7):
-                return self._template.render(context)
+                result = self._template.render(context)
             else:
-                return self._template.render(
+                result = self._template.render(
                     context.flatten(), context.request
                 )
 
         elif isinstance(context, C):
             if _VERSION <= (1, 7):
                 if request:
-                    return self._template.render(
+                    result = self._template.render(
                         RC(request, context.flatten())
                     )
                 else:
-                    return self._template.render(context)
+                    result = self._template.render(context)
             else:
-                return self._template.render(context.flatten(), request)
+                result = self._template.render(context.flatten(), request)
 
         else:
             if _VERSION <= (1, 7):
                 if request:
-                    return self._template.render(RC(request, context))
+                    result = self._template.render(RC(request, context))
                 else:
-                    return self._template.render(C(context))
+                    result = self._template.render(C(context))
             else:
-                return self._template.render(context, request)
+                result = self._template.render(context, request)
+
+        return result
 
 
 def get_template(*args, **kwargs):
-    u"""Совместимый аналог функции :func:`django.template.loader.get_template`.
+    """Совместимый аналог функции :func:`django.template.loader.get_template`.
 
     Позволяет вызывать метод ``render()`` шаблона передавая в качестве
     аргумента экземпляры :class:`django.template.Context`,
@@ -517,9 +529,10 @@ def get_template(*args, **kwargs):
 # -----------------------------------------------------------------------------
 
 
+@six.add_metaclass(ABCMeta)
 class DatabaseRouterBase(object):
 
-    u"""Базовый класс для роутеров баз данных.
+    """Базовый класс для роутеров баз данных.
 
     Обеспечивает совместимость роутера для разных версий Django в части методов
     :meth:`allow_sync` и :meth:`allow_migrate`.
@@ -527,11 +540,9 @@ class DatabaseRouterBase(object):
     В потомках нужно реализовать метод :meth:`_allow`.
     """
 
-    __metaclass__ = ABCMeta
-
     @abstractmethod
     def _allow(self, db, app_label, model_name):
-        u"""Возвращает True, если разрешена синхронизация/миграция для модели.
+        """Возвращает True, если разрешена синхронизация/миграция для модели.
 
         :param str db: Алиас базы данных.
         :param str app_label: Название приложения.
@@ -578,9 +589,9 @@ class CommandParser(ArgumentParser):
             raise management.CommandError("Error: %s" % message)
 
 
-class BaseCommand(management.BaseCommand):
+class BaseCommand(management.BaseCommand):  # pylint: disable=abstract-method
 
-    u"""Базовый класс для management-команд, использующий argparse."""
+    """Базовый класс для management-команд, использующий argparse."""
 
     def add_arguments(self, parser):
         pass
@@ -644,7 +655,7 @@ class BaseCommand(management.BaseCommand):
             handle_default_options(options)
             try:
                 self.execute(*args, **cmd_options)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-except
                 if options.traceback or not isinstance(e, CommandError):
                     raise
 
