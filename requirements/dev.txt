@@ -1,0 +1,11 @@
+-r base.txt
+
+fabric3
+tox
+coverage
+isort
+pycodestyle
+pylint
+ipython
+ipdb
+pudb

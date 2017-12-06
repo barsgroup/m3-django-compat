@@ -1,4 +1,5 @@
-graft src
+graft src/m3_django_compat
 include README.rst
 include version.conf
+include requirements/base.txt
 global-exclude *.pyc

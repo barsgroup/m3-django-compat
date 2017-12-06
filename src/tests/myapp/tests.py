@@ -1,28 +1,33 @@
 # coding: utf-8
-from StringIO import StringIO
 from warnings import catch_warnings
 import atexit
 import json
 import subprocess
 import sys
 
-from django.core.management import load_command_class, call_command
+from django.core.management import call_command
+from django.core.management import load_command_class
 from django.db import models
+from django.db.models.fields import FieldDoesNotExist
 from django.db.models.query import QuerySet
 from django.db.utils import DEFAULT_DB_ALIAS
 from django.test import Client
 from django.test import SimpleTestCase
 from django.test import TestCase
+from six import print_
+
+from m3_django_compat import _VERSION
 from m3_django_compat import AUTH_USER_MODEL
 from m3_django_compat import DatabaseRouterBase
 from m3_django_compat import ModelOptions
 from m3_django_compat import RelatedObject
-from m3_django_compat import _VERSION
 from m3_django_compat import atomic
 from m3_django_compat import get_model
 from m3_django_compat import get_related
 from m3_django_compat import get_user_model
 from m3_django_compat import in_atomic_block
+from six.moves import StringIO
+from six.moves import range
 
 
 # -----------------------------------------------------------------------------
@@ -102,10 +107,8 @@ class AtomicTestCase(SimpleTestCase):
         self.assertFalse(in_atomic_block())
         # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
         # Откат транзакции без вложенных atomic-ов
-        try:
+        with self.assertRaisesMessage(ValueError, 'error1'):
             self._simple_failure()
-        except ValueError as error:
-            self.assertRaisesMessage(error, 'error2')
         self.assertFalse(self._is_user_exist('user2'))
         self.assertFalse(in_atomic_block())
         # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -116,10 +119,8 @@ class AtomicTestCase(SimpleTestCase):
         self.assertFalse(in_atomic_block())
         # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
         # Откат транзакции с вложенными atomic-ами
-        try:
+        with self.assertRaisesMessage(ValueError, 'error2'):
             self._outer_failure()
-        except ValueError as error:
-            self.assertRaisesMessage(error, 'error2')
         self.assertFalse(self._is_user_exist('user5'))
         self.assertFalse(self._is_user_exist('user6'))
         self.assertFalse(in_atomic_block())
@@ -134,7 +135,7 @@ class ManagerTestCase(TestCase):
         model = get_model('myapp', 'ModelWithCustomManager')
         self.assertIsNotNone(model)
 
-        for i in xrange(-5, 6):
+        for i in range(-5, 6):
             model.objects.create(number=i)
 
         self.assertIsInstance(model.new_manager.get_query_set(), QuerySet)
@@ -145,11 +146,11 @@ class ManagerTestCase(TestCase):
         self.assertEqual(model.objects.count(), model.old_manager.count())
         self.assertEqual(model.objects.count(), model.new_manager.count())
 
-        with self.assertNumQueries(1), catch_warnings('ignore'):
+        with self.assertNumQueries(1), catch_warnings():
             self.assertTrue(
                 all(obj.number > 0 for obj in model.old_manager.positive())
             )
-        with self.assertNumQueries(1), catch_warnings('ignore'):
+        with self.assertNumQueries(1), catch_warnings():
             self.assertTrue(
                 all(obj.number < 0 for obj in model.old_manager.negative())
             )
@@ -222,6 +223,7 @@ class ModelOptionsTestCase(TestCase):
             opts = ModelOptions(model)
 
             for f, _ in opts.get_m2m_with_model():
+                # pylint: disable=protected-access
                 self.assertIsInstance(f, models.ManyToManyField)
                 self.assertIn(f.name, m2m_fields)
                 self.assertIs(f, model._meta.get_field(f.name))
@@ -262,6 +264,12 @@ class ModelOptionsTestCase(TestCase):
                 isinstance(ro, RelatedObject)
                 for ro in related_objects
             ))
+            if related_objects:
+                repr(related_objects[0])
+
+        model = get_model('myapp', 'Model1')
+        with self.assertRaises(FieldDoesNotExist):
+            ModelOptions(model).get_field('model2')
 # -----------------------------------------------------------------------------
 # Проверка базового класса для роутеров баз данных
 
@@ -309,23 +317,23 @@ class GetTemplateTestCase(TestCase):
 
         template = get_template('get_template.html')
 
-        self.assertEquals(
+        self.assertEqual(
             template.render({'var': 'value'}),
             '<p>value</p><p></p>'
         )
-        self.assertEquals(
+        self.assertEqual(
             template.render(Context({'var': 'value'})),
             '<p>value</p><p></p>'
         )
-        self.assertEquals(
+        self.assertEqual(
             template.render({'var': 'value'}, request),
             '<p>value</p><p>testuser</p>'
         )
-        self.assertEquals(
+        self.assertEqual(
             template.render(Context({'var': 'value'}), request),
             '<p>value</p><p>testuser</p>'
         )
-        self.assertEquals(
+        self.assertEqual(
             template.render(RequestContext(request, {'var': 'value'})),
             '<p>value</p><p>testuser</p>'
         )
@@ -339,8 +347,8 @@ class TestUrlPatterns(SimpleTestCase):
     def test__urlpatterns(self):
         client = Client()
         response = client.get('/test/')
-        self.assertEquals(response.status_code, 200)
-        self.assertEquals(response.content, '<html></html>')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content.decode('utf-8'), '<html></html>')
 # -----------------------------------------------------------------------------
 
 
@@ -350,8 +358,8 @@ class _StreamReplacer(object):
     # использовать альтернативный поток вывода.
 
     def __init__(self, stdout, stderr):
-        self._stdout = stdout
-        self._stderr = stderr
+        self._stdout, self._sys_stdout = stdout, None
+        self._stderr, self._sys_stderr = stderr, None
 
     def __enter__(self):
         sys.stdout, self._sys_stdout = self._stdout, sys.stdout
@@ -379,6 +387,7 @@ class _ExitHandler(object):
         if hasattr(atexit, 'unregister'):
             atexit.unregister(self.__handler)
         else:
+            # pylint: disable=no-member,protected-access
             index = None
             for i, (handler, _, _) in enumerate(atexit._exithandlers):
                 if handler is self.__handler:
@@ -396,8 +405,8 @@ class BaseCommandTestCase(SimpleTestCase):
 
     def __exit_handler(self):
         if self.__stdout and self.__stderr:
-            print self.__stdout.getvalue()
-            print self.__stderr.getvalue()
+            print_(self.__stdout.getvalue())
+            print_(self.__stderr.getvalue())
 
     def setUp(self):
         self.__stdout = StringIO()
@@ -475,12 +484,12 @@ class BaseCommandTestCase(SimpleTestCase):
         )
         process.wait()
 
-        output = process.stdout.read()
-        errors = process.stderr.read()
+        output = process.stdout.read().decode('utf-8')
+        errors = process.stderr.read().decode('utf-8')
 
         if process.returncode != 0:
-            print output
-            print errors
+            print_(output)
+            print_(errors)
         else:
             self.assertEqual(process.returncode, 0)
             self.__check_result(output, errors)
