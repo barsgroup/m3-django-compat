@@ -1,18 +1,6 @@
 # coding: utf-8
 import os
-import sys
-
-from pip.download import PipSession
-from pip.req.req_file import parse_requirements
-from setuptools import find_packages
-from setuptools import setup
-
-
-def _get_requirements(file_path):
-    pip_session = PipSession()
-    requirements = parse_requirements(file_path, session=pip_session)
-
-    return tuple(str(requirement.req) for requirement in requirements)
+from setuptools import setup, find_packages
 
 
 def main():
@@ -54,9 +42,13 @@ def main():
             'https://pypi.bars-open.ru/simple/m3-builder',
         ),
         setup_requires=(
-            'm3-builder>=1.1',
+            'm3-builder>=1.2,<2',
         ),
-        install_requires=_get_requirements('requirements/base.txt'),
+        install_requires=(
+            'six>=1.11.0,<2',
+            'm3-builder>=1.2,<2',
+            'django>=1.4,<2',
+        ),
         set_build_info=os.path.join(os.path.dirname(__file__)),
     )
 
