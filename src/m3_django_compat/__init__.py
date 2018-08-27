@@ -12,12 +12,10 @@ from django import VERSION
 from django.conf import settings
 from django.core import management
 from django.db import transaction as _transaction
-from django.db import connections
 from django.db.models.base import Model
 from django.db.models.fields import FieldDoesNotExist
 from django.db.models.fields.related import ForeignKey
 from django.db.models.manager import Manager as _Manager
-from django.utils.functional import cached_property
 import six
 
 
@@ -665,4 +663,16 @@ class BaseCommand(management.BaseCommand):  # pylint: disable=abstract-method
                 else:
                     self.stderr.write('%s: %s' % (e.__class__.__name__, e))
                 sys.exit(1)
+# -----------------------------------------------------------------------------
+# Типы для wrapper-ов функций встроенных типов
+
+
+if sys.version_info < (3, 7):
+    WrapperDescriptorType = type(object.__init__)
+    MethodWrapperType = type(object().__init__)
+    MethodDescriptorType = type(str.join)
+else:
+    from types import WrapperDescriptorType
+    from types import MethodWrapperType
+    from types import MethodDescriptorType
 # -----------------------------------------------------------------------------
