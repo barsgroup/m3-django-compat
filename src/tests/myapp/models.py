@@ -49,9 +49,9 @@ class Model1(models.Model):
 class Model2(models.Model):
 
     simple_field = models.CharField(u'Field 1', max_length=10)
-    fk_field = models.ForeignKey(Model1)
+    fk_field = models.ForeignKey(Model1, on_delete=models.CASCADE)
 
-    content_type = models.ForeignKey(ContentType)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.IntegerField()
     gfk_field = GenericForeignKey()
 

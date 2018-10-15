@@ -23,8 +23,13 @@ INSTALLED_APPS = [
 
 
 MIDDLEWARE_CLASSES = [
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
 ]
+
+if VERSION >= (2, 0):
+    MIDDLEWARE = MIDDLEWARE_CLASSES
 
 ROOT_URLCONF = 'myapp.urls'
 
