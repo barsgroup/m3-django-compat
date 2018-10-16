@@ -5,6 +5,8 @@ import json
 import subprocess
 import sys
 
+from django.contrib.auth import get_user
+from django.contrib.auth.models import AnonymousUser
 from django.core.management import call_command
 from django.core.management import load_command_class
 from django.db import models
@@ -17,6 +19,7 @@ from django.test import TestCase
 from six import print_
 
 from m3_django_compat import _VERSION
+from m3_django_compat import is_authenticated
 from m3_django_compat import AUTH_USER_MODEL
 from m3_django_compat import DatabaseRouterBase
 from m3_django_compat import ModelOptions
@@ -270,6 +273,7 @@ class ModelOptionsTestCase(TestCase):
         model = get_model('myapp', 'Model1')
         with self.assertRaises(FieldDoesNotExist):
             ModelOptions(model).get_field('model2')
+
 # -----------------------------------------------------------------------------
 # Проверка базового класса для роутеров баз данных
 
@@ -493,4 +497,41 @@ class BaseCommandTestCase(SimpleTestCase):
         else:
             self.assertEqual(process.returncode, 0)
             self.__check_result(output, errors)
+# -----------------------------------------------------------------------------
+
+
+class AuthTestCases(TestCase):
+    """Проверка корректности работы метода is_authenticated."""
+
+    def setUp(self):
+        super(AuthTestCases, self).setUp()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username='test_user',
+            password='password',
+            email='test@example.com',
+        )
+
+    def test_is_authenticated_success_login(self):
+        """Проверка в случае удачного входа."""
+
+        self.client.login(username='test_user', password='password')
+        user = get_user(self.client)
+        self.assertTrue(is_authenticated(user))
+
+    def test_is_authenticated_no_success_login(self):
+        """Проверка в случае не удачного входа."""
+
+        self.client.login(username='test_user', password='wrong_password')
+        user = get_user(self.client)
+        self.assertFalse(is_authenticated(user))
+
+    def test_anonymous_authenticated(self):
+        """Проверка правильности работы функции при передачи AnonymousUser."""
+
+        self.client.get('/test')
+        user = get_user(self.client)
+        self.assertIsInstance(user, (AnonymousUser,))
+        self.assertFalse(is_authenticated(user))
+
 # -----------------------------------------------------------------------------

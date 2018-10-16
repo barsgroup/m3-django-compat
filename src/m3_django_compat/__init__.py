@@ -26,7 +26,7 @@ _14 = _VERSION == (1, 4)
 MIN_SUPPORTED_VERSION = (1, 4)
 
 #: Максимальная поддерживаемая версия Django.
-MAX_SUPPORTED_VERSION = (1, 11)
+MAX_SUPPORTED_VERSION = (2, 0)
 
 assert MIN_SUPPORTED_VERSION <= _VERSION <= MAX_SUPPORTED_VERSION, (
     'Unsupported Django version: {}.{}'.format(*_VERSION)
@@ -675,4 +675,22 @@ else:
     from types import WrapperDescriptorType
     from types import MethodWrapperType
     from types import MethodDescriptorType
+# -----------------------------------------------------------------------------
+# Функции для совместимости c django 2.0
+
+
+def is_authenticated(user):
+    """Возвращает True, если пользователь аутентифицирован.
+
+    :param user: Объект модели пользователя из settings.AUTH_USER_MODEL.
+    :type user: django.contrib.auth.base_user.AbstractBaseUser
+
+    :rtype: bool
+
+    """
+    if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 11):
+        return user.is_authenticated()
+    else:
+        return user.is_authenticated
+
 # -----------------------------------------------------------------------------
