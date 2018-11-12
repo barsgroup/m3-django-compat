@@ -14,7 +14,7 @@ from django.core import management
 from django.db import transaction as _transaction
 from django.db.models.base import Model
 from django.db.models.fields import FieldDoesNotExist
-from django.db.models.fields.related import ForeignKey
+from django.db.models.fields.related import RelatedField
 from django.db.models.manager import Manager as _Manager
 import six
 
@@ -330,9 +330,9 @@ def get_related(field):
     """Возвращает RelatedObject для поля модели.
 
     :param field: Поле модели.
-    :type field: django.db.models.fields.related.ForeignKey
+    :type field: django.db.models.fields.related.RelatedField
     """
-    assert isinstance(field, ForeignKey), field
+    assert isinstance(field, RelatedField), field
 
     if _VERSION <= (1, 7):
         result = field.related
