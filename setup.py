@@ -26,6 +26,7 @@ def main():
             'Framework :: Django :: 1.10',
             'Framework :: Django :: 1.11',
             'Framework :: Django :: 2.0',
+            'Framework :: Django :: 2.1',
             'Programming Language :: Python',
             'Programming Language :: Python :: 2',
             'Programming Language :: Python :: 2.7',
@@ -48,7 +49,7 @@ def main():
         install_requires=(
             'six>=1.11.0,<2',
             'm3-builder>=1.2,<2',
-            'django>=1.4,<2.1',
+            'django>=1.4,<2.2',
         ),
         set_build_info=os.path.join(os.path.dirname(__file__)),
     )
