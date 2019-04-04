@@ -26,7 +26,7 @@ _14 = _VERSION == (1, 4)
 MIN_SUPPORTED_VERSION = (1, 4)
 
 #: Максимальная поддерживаемая версия Django.
-MAX_SUPPORTED_VERSION = (2, 1)
+MAX_SUPPORTED_VERSION = (2, 2)
 
 assert MIN_SUPPORTED_VERSION <= _VERSION <= MAX_SUPPORTED_VERSION, (
     'Unsupported Django version: {}.{}'.format(*_VERSION)
