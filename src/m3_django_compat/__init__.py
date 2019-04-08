@@ -21,9 +21,10 @@ import six
 
 _VERSION = VERSION[:2]
 _14 = _VERSION == (1, 4)
+_13 = _VERSION == (1, 3)
 
 #: Минимальная подерживаемая версия Django.
-MIN_SUPPORTED_VERSION = (1, 4)
+MIN_SUPPORTED_VERSION = (1, 3)
 
 #: Максимальная поддерживаемая версия Django.
 MAX_SUPPORTED_VERSION = (2, 2)
@@ -102,7 +103,7 @@ if any(
     app_package_name.startswith('django.contrib.auth')
     for app_package_name in settings.INSTALLED_APPS
 ):
-    AUTH_USER_MODEL = 'auth.User' if _14 else settings.AUTH_USER_MODEL
+    AUTH_USER_MODEL = 'auth.User' if _14 or _13 else settings.AUTH_USER_MODEL
 
 
 def get_user_model():
@@ -117,7 +118,7 @@ def get_user_model():
     """
     if 'django.contrib.auth' not in get_installed_apps():
         result = None
-    elif _14:
+    elif _14 or _13:
         result = get_model('auth', 'User')
     else:
         from django.contrib.auth import get_user_model as _get_user_model

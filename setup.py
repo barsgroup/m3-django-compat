@@ -17,6 +17,7 @@ def main():
             'Intended Audience :: Developers',
             'Natural Language :: Russian',
             'Operating System :: OS Independent',
+            'Framework :: Django :: 1.3',
             'Framework :: Django :: 1.4',
             'Framework :: Django :: 1.5',
             'Framework :: Django :: 1.6',
@@ -50,7 +51,7 @@ def main():
         install_requires=(
             'six>=1.11.0,<2',
             'm3-builder>=1.2,<2',
-            'django>=1.4,<2.3',
+            'django>=1.3,<2.3',
         ),
         set_build_info=os.path.join(os.path.dirname(__file__)),
     )
