@@ -631,6 +631,12 @@ class BaseCommand(management.BaseCommand):  # pylint: disable=abstract-method
                 help="Don't colorize the command output.",
             )
 
+        if _VERSION >= (2,2):
+            parser.add_argument(
+                '--force-color', action='store_true',
+                help='Force colorization of the command output.',
+            )
+
         parser.add_argument('args', nargs='*')
 
         self.add_arguments(parser)
