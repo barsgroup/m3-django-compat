@@ -61,12 +61,18 @@ if MIN_SUPPORTED_VERSION <= _VERSION < (3, 0):
     from django.utils.decorators import (
         classproperty,
     )
+    from django.contrib.postgres.fields import (
+        JSONField,
+    )
 else:
     from django.core.exceptions import (
         FieldDoesNotExist,
     )
     from django.utils.functional import (
         classproperty,
+    )
+    from django.db.models import (
+        JSONField,
     )
 # -----------------------------------------------------------------------------
 
