@@ -1,22 +1,44 @@
-# coding: utf-8
-from __future__ import unicode_literals
-
-from abc import ABCMeta
-from abc import abstractmethod
-from argparse import ArgumentParser
-from inspect import isclass
 import os
-import sys
-
-from django import VERSION
-from django.conf import settings
-from django.core import management
-from django.db import transaction as _transaction
-from django.db.models.base import Model
-from django.db.models.fields import FieldDoesNotExist
-from django.db.models.fields.related import RelatedField
-from django.db.models.manager import Manager as _Manager
 import six
+import sys
+from abc import (
+    ABCMeta,
+    abstractmethod,
+)
+from argparse import (
+    ArgumentParser,
+)
+from inspect import (
+    isclass,
+)
+
+from django import (
+    VERSION,
+)
+from django.conf import (
+    settings,
+)
+from django.core import (
+    management,
+)
+from django.db import (
+    transaction as _transaction,
+)
+from django.db.models.base import (
+    Model,
+)
+from django.db.models.fields.related import (
+    RelatedField,
+)
+from django.db.models.manager import (
+    Manager as _Manager,
+)
+from django.http import (
+    HttpResponse,
+)
+from django.template import (
+    loader,
+)
 
 
 _VERSION = VERSION[:2]
@@ -26,11 +48,26 @@ _14 = _VERSION == (1, 4)
 MIN_SUPPORTED_VERSION = (1, 4)
 
 #: Максимальная поддерживаемая версия Django.
-MAX_SUPPORTED_VERSION = (2, 2)
+MAX_SUPPORTED_VERSION = (3, 3)
 
 assert MIN_SUPPORTED_VERSION <= _VERSION <= MAX_SUPPORTED_VERSION, (
     'Unsupported Django version: {}.{}'.format(*_VERSION)
 )
+
+if MIN_SUPPORTED_VERSION <= _VERSION < (3, 0):
+    from django.db.models.fields import (
+        FieldDoesNotExist
+    )
+    from django.utils.decorators import (
+        classproperty,
+    )
+else:
+    from django.core.exceptions import (
+        FieldDoesNotExist,
+    )
+    from django.utils.functional import (
+        classproperty,
+    )
 # -----------------------------------------------------------------------------
 
 
@@ -48,7 +85,9 @@ def get_installed_apps():
         result = settings.INSTALLED_APPS
 
     else:
-        from django.apps import apps
+        from django.apps import (
+            apps,
+        )
 
         result = (
             app_config.name
@@ -69,10 +108,14 @@ def get_model(app_label, model_name):
     :rtype: :class:`django.db.models.base.ModelBase`
     """
     if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 6):
-        from django.db.models.loading import get_model as get_model_
+        from django.db.models.loading import (
+            get_model as get_model_,
+        )
         result = get_model_(app_label, model_name)
     else:
-        from django.apps import apps
+        from django.apps import (
+            apps,
+        )
         result = apps.get_model(app_label, model_name)
 
     return result
@@ -120,7 +163,9 @@ def get_user_model():
     elif _14:
         result = get_model('auth', 'User')
     else:
-        from django.contrib.auth import get_user_model as _get_user_model
+        from django.contrib.auth import (
+            get_user_model as _get_user_model,
+        )
         result = _get_user_model()
 
     return result
@@ -202,7 +247,9 @@ def atomic(using=None, savepoint=True):
     if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 5):
         if callable(using):
             # atomic вызван как декоратор без параметров
-            from django.db.utils import DEFAULT_DB_ALIAS
+            from django.db.utils import (
+                DEFAULT_DB_ALIAS,
+            )
             func = using
             using = DEFAULT_DB_ALIAS
         else:
@@ -228,7 +275,9 @@ def commit_unless_managed(using=None):
     была удалена.
     """
     if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 5):
-        from django.db.transaction import commit_unless_managed as func
+        from django.db.transaction import (
+            commit_unless_managed as func,
+        )
         return func(using)
 # -----------------------------------------------------------------------------
 # Обеспечение совместимости менеджеров моделей
@@ -251,7 +300,9 @@ class Manager(_Manager):
 
     if (1, 6) <= _VERSION <= (1, 7):
         # Подавление предупреждения о необходимости переименования методов.
-        from django.db.models.manager import RenameManagerMethods
+        from django.db.models.manager import (
+            RenameManagerMethods,
+        )
 
         # pylint: disable=invalid-name
         class __metaclass__(RenameManagerMethods):
@@ -293,9 +344,13 @@ class Manager(_Manager):
 
 
 if MIN_SUPPORTED_VERSION <= _VERSION <= (1, 7):
-    from django.template.loader import BaseLoader
+    from django.template.loader import (
+        BaseLoader,
+    )
 else:
-    from django.template.loaders.base import Loader as BaseLoader
+    from django.template.loaders.base import (
+        Loader as BaseLoader,
+    )
 # -----------------------------------------------------------------------------
 # Средства обеспечения совместимости с разными версиями Model API
 
@@ -464,8 +519,11 @@ class TemplateWrapper(object):
         return getattr(self._template, name)
 
     def render(self, context=None, request=None):
-        from django.template.context import Context as C
-        from django.template.context import RequestContext as RC
+        from django.template.context import (
+            Context as C,
+            RequestContext as RC,
+        )
+
         # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
         if isinstance(context, C) and _VERSION <= (1, 6):
@@ -476,7 +534,9 @@ class TemplateWrapper(object):
                     flat.update(d)
                 return flat
 
-            from types import MethodType
+            from types import (
+                MethodType,
+            )
 
             context.flatten = MethodType(flatten, context, type(context))
         # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -522,7 +582,9 @@ def get_template(*args, **kwargs):
 
     :rtype: django.template.Template
     """
-    from django.template.loader import get_template as _get_template
+    from django.template.loader import (
+        get_template as _get_template,
+    )
     return TemplateWrapper(_get_template(*args, **kwargs))
 # -----------------------------------------------------------------------------
 
@@ -645,8 +707,10 @@ class BaseCommand(management.BaseCommand):  # pylint: disable=abstract-method
 
     if _VERSION < (1, 8):
         def run_from_argv(self, argv):
-            from django.core.management import handle_default_options
-            from django.core.management import CommandError
+            from django.core.management import (
+                CommandError,
+                handle_default_options,
+            )
 
             self._called_from_command_line = True
             parser = self.create_parser(argv[0], argv[1])
@@ -678,9 +742,11 @@ if sys.version_info < (3, 7):
     MethodWrapperType = type(object().__init__)
     MethodDescriptorType = type(str.join)
 else:
-    from types import WrapperDescriptorType
-    from types import MethodWrapperType
-    from types import MethodDescriptorType
+    from types import (
+        MethodDescriptorType,
+        MethodWrapperType,
+        WrapperDescriptorType,
+    )
 # -----------------------------------------------------------------------------
 # Функции для совместимости c django 2.0
 
@@ -700,3 +766,11 @@ def is_authenticated(user):
         return user.is_authenticated
 
 # -----------------------------------------------------------------------------
+
+def render_to_response(template_name, context=None, content_type=None, status=None, using=None):
+    """
+    Return a HttpResponse whose content is filled with the result of calling
+    django.template.loader.render_to_string() with the passed arguments.
+    """
+    content = loader.render_to_string(template_name, context, using=using)
+    return HttpResponse(content, content_type, status)
